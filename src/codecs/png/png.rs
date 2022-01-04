@@ -52,8 +52,8 @@ struct IDAT<'a> {
 pub struct PngImage {
     ihdr: Option<IHDR>,
     idat: Vec<u8>,
-    bpp: u32,
     color_index: Option<Vec<(u8, u8, u8)>>,
+    bpp: usize,
     has_end: bool,
 }
 
@@ -103,10 +103,6 @@ impl ColorType  {
     }
 }
 
-
-
-
-
 fn peath_predictor(a: i16, b: i16, c: i16) -> u8 {
     let p = a + b - c;
     let pa = (p - a).abs();
@@ -122,9 +118,8 @@ fn peath_predictor(a: i16, b: i16, c: i16) -> u8 {
         ret = c;
     }
 
-    return (ret % 255) as u8
+    return (ret % 256) as u8
 }
-
 
 fn map_indexed_color(index: &Vec<(u8, u8, u8)>, img: &Vec<u8>, size: usize) -> Vec<u8> {
     let mut ret: Vec<u8> = Vec::with_capacity(size);
@@ -145,14 +140,14 @@ impl PngImage {
         PngImage {
             ihdr: None,
             idat: Vec::new(),
-            bpp: 4,
+            bpp: 0,
             color_index: None,
             has_end: false,
         }
     }
 
     fn filter_scanline(&self, prev: &[u8], sl: &mut [u8], filter_method: FilterType) {
-        let bpp = self.bpp as usize;
+        let bpp = self.bpp;
         let scanline_len = self.scanline_len();
 
         match filter_method {
@@ -204,6 +199,10 @@ impl PngImage {
             ColorType::TrueColorAlpha => 4,
             ColorType::IndexedColor => 1,
         }
+    }
+
+    fn calculate_bpp(&mut self) {
+        self.bpp = self.scanline_nb_pixel_components() as usize;
     }
 
     fn scanline_pixel_data_size(&self) -> usize {
@@ -456,6 +455,7 @@ fn parse_png(chunk: &[u8]) -> Result<(&[u8], PngImage), ImageError> {
         match p.1.name {
             "IHDR" => {
                 image.ihdr = Some(parse_ihdr(p.1)?);
+                image.calculate_bpp();
                 info!("IHDR: {:?}", image.ihdr);
             }
             "IDAT" => {
