@@ -2,11 +2,9 @@ extern crate nom;
 extern crate miniz_oxide;
 
 use nom::bytes::complete::*;
-use nom::error::Error;
 use nom::number::complete::*;
 use nom::sequence::{tuple, terminated};
 use nom::multi::count;
-use nom::IResult;
 use std::str;
 use miniz_oxide::inflate::decompress_to_vec_zlib;
 use std::ops::Div;
@@ -250,15 +248,11 @@ impl PngImage {
             }
             ColorType::TrueColorAlpha => {
                 ret = Vec::with_capacity((self.nb_pixels() * 3) as usize);
-//                ret = vec!(0u8; (self.nb_pixels() * 3) as usize);
 
-                for (i, b) in img.chunks(4).enumerate() {
-  //                  debug!("{}: {:?}", i ,b );
+                for b in img.chunks(4) {
                     ret.push(b[0]);
                     ret.push(b[1]);
                     ret.push(b[2]);
-                    
-//                    ret[i..i+3].copy_from_slice(&b[0..3]);
                 }
             }
             ColorType::TrueColor => {
@@ -301,7 +295,7 @@ impl<R: Read> ReadImage<R> for PngImage {
     }
 }
 
-fn parse_idat(idat_chunk: Chunk) -> Result<IDAT, nom::Err<Error<&[u8]>>> {
+fn parse_idat(idat_chunk: Chunk) -> Result<IDAT, ImageError> {
     assert_eq!(idat_chunk.name, "IDAT");
     
     let idat = IDAT {
@@ -311,13 +305,13 @@ fn parse_idat(idat_chunk: Chunk) -> Result<IDAT, nom::Err<Error<&[u8]>>> {
     return Ok(idat);
 }
 
-fn parse_iend(iend_chunk: Chunk) -> Result<bool, nom::Err<Error<&[u8]>>> {
+fn parse_iend(iend_chunk: Chunk) -> Result<bool, ImageError> {
     assert_eq!(iend_chunk.name, "IEND");
     assert_eq!(iend_chunk.len, 0);
     return Ok(true);
 }
 
-fn parse_ihdr(ihdr_chunk: Chunk) -> Result<IHDR, nom::Err<Error<&[u8]>>> {
+fn parse_ihdr(ihdr_chunk: Chunk) -> Result<IHDR, ImageError> {
     assert_eq!(ihdr_chunk.name, "IHDR");
     assert_eq!(ihdr_chunk.len, 13);
 
@@ -332,6 +326,27 @@ fn parse_ihdr(ihdr_chunk: Chunk) -> Result<IHDR, nom::Err<Error<&[u8]>>> {
         interlace_method)
     ) = tuple((be_u32, be_u32, u8, u8, u8, u8, u8))(ihdr_chunk.data)?;
 
+    if ! [1, 2, 4, 8, 16].contains(&bit_depth) {
+        return Err(ImageError::Decoding(DecodingError {str: format!("Wrong bit depht {}", bit_depth)}));
+    }
+    if bit_depth != 8 { //TODO: remove
+        return Err(ImageError::Decoding(DecodingError {str: format!("Unsupported bit deph {}", bit_depth)}));
+    }
+    if ! [0, 2, 3, 4, 6].contains(&color_type) {
+        return Err(ImageError::Decoding(DecodingError {str: format!("Unknown color type {}", color_type)}));
+    }
+    if ! [0, 1].contains(&interlace_method) {
+        return Err(ImageError::Decoding(DecodingError {str: format!("Unknown interlace method {}", interlace_method)}));
+    }
+
+    if compression_method != 0 {
+        return Err(ImageError::Decoding(DecodingError {str: format!("Unknown compression method {}", compression_method)}));
+    }
+
+    if filter_method != 0 {
+        return Err(ImageError::Decoding(DecodingError {str: format!("Unknown filter method {}", filter_method)}));
+    }
+    
     let ihdr = IHDR {
         width,
         height,
@@ -342,39 +357,34 @@ fn parse_ihdr(ihdr_chunk: Chunk) -> Result<IHDR, nom::Err<Error<&[u8]>>> {
         interlace_method,
     };
 
-    assert!([1, 2, 4, 8, 16].contains(&ihdr.bit_depth));
-    assert!([0, 2, 3, 4, 6].contains(&color_type));
-    assert!([0, 1].contains(&ihdr.interlace_method));
-    assert_eq!(ihdr.compression_method, 0);
-    assert_eq!(ihdr.filter_method, 0);
     return Ok(ihdr);
 }
 
-fn parse_text(text_chunk: Chunk) -> Result<&str, nom::Err<Error<&[u8]>>> {
+fn parse_text(text_chunk: Chunk) -> Result<&str, ImageError> {
     assert_eq!(text_chunk.name, "tEXt");
 
-    let text = str::from_utf8(text_chunk.data).unwrap();
+    let text = str::from_utf8(text_chunk.data)?;
     info!("text: {}", text);
 
     return Ok(&text);
 }
 
-fn parse_ztxt(text_chunk: Chunk) -> Result<(&str, String), nom::Err<Error<&[u8]>>> {
+fn parse_ztxt(text_chunk: Chunk) -> Result<(&str, String), ImageError> {
     assert_eq!(text_chunk.name, "zTXt");
     let (r, keyword) = terminated(take_while(|b: u8| b != 0), tag([0x0]))(text_chunk.data)?;
     let (r, compression_method) = u8(r)?;
 
     assert_eq!(compression_method, 0);
-    let keyword_utf = str::from_utf8(keyword).unwrap();
+    let keyword_utf = str::from_utf8(keyword)?;
 
-    let decoded = decompress_to_vec_zlib(r).unwrap();
-    let text = String::from_utf8(decoded).unwrap();
+    let decoded = decompress_to_vec_zlib(r)?;
+    let text = String::from_utf8(decoded)?;
     info!("ztxt {}: {}", keyword_utf, text);
 
     return Ok((&keyword_utf, text));
 }
 
-fn parse_phys(chunk: Chunk) -> Result<(u32, u32, bool), nom::Err<Error<&[u8]>>> {
+fn parse_phys(chunk: Chunk) -> Result<(u32, u32, bool), ImageError> {
     assert_eq!(chunk.name, "pHYs");
     assert_eq!(chunk.len, 9);
     let (r, ppux) = be_u32(chunk.data)?;
@@ -392,7 +402,7 @@ fn parse_phys(chunk: Chunk) -> Result<(u32, u32, bool), nom::Err<Error<&[u8]>>> 
     Ok((ppux, ppuy, unit == 1))
 }
 
-fn parse_time(chunk: Chunk) -> Result<u8, nom::Err<Error<&[u8]>>> {
+fn parse_time(chunk: Chunk) -> Result<(u16, u8, u8, u8, u8, u8), ImageError> {
     assert_eq!(chunk.name, "tIME");
     assert_eq!(chunk.len, 7);
 
@@ -400,10 +410,10 @@ fn parse_time(chunk: Chunk) -> Result<u8, nom::Err<Error<&[u8]>>> {
 
     info!("time: {}-{:#02}-{:#02} {:#02}:{:#02}:{:#02}", year, month, day, hour, minute, second);
 
-    Ok(0)
+    Ok((year, month, day, hour, minute, second))
 }
 
-fn parse_plte(chunk: Chunk) -> Result<Vec<(u8, u8, u8)>, nom::Err<Error<&[u8]>>> {
+fn parse_plte(chunk: Chunk) -> Result<Vec<(u8, u8, u8)>, ImageError> {
     assert_eq!(chunk.name, "PLTE");
     assert_eq!(chunk.len % 3, 0);
     let nb_colors = chunk.len / 3;
@@ -415,62 +425,85 @@ fn parse_plte(chunk: Chunk) -> Result<Vec<(u8, u8, u8)>, nom::Err<Error<&[u8]>>>
     Ok(colors)
 }
 
-fn parse_chunk(chunk: &[u8]) -> IResult<&[u8], Chunk> {
+fn parse_chunk(chunk: &[u8]) -> Result<(&[u8], Chunk), ImageError> {
     let (r, len): (&[u8], u32) = be_u32(chunk)?;
     let (r, name_bytes): (&[u8], &[u8]) = take(4 as u32)(r)?;
     let (r, data): (&[u8], &[u8]) = take(len)(r)?;
     let (r, crc): (&[u8], u32) = be_u32(r)?;
 
-    let name = str::from_utf8(name_bytes).unwrap();
+    let name = str::from_utf8(name_bytes)?;
 
     info!("\tChunk name: {}, size: {}, crc: {}", name, len, crc);
 
     let chunk = Chunk { len, name, data, crc };
 
     if ! chunk.check_crc() {
-        panic!("Chunk crc error");
+        return Err(ImageError::Decoding(DecodingError::new("Chunk crc error")));
     }
 
     Ok((r, chunk))
 }
 
-pub fn parse_png(chunk: &[u8]) -> IResult<&[u8], PngImage> {
+fn parse_png(chunk: &[u8]) -> Result<(&[u8], PngImage), ImageError> {
     debug!("Parsing png");
     let (r, _) = tag([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])(chunk)?;
     let mut suite = r;
     let mut image = PngImage::new();
 
+    //TODO: check for mandatory chunks
     while suite.len() > 0 {
         let p = parse_chunk(suite)?;
         match p.1.name {
             "IHDR" => {
-                image.ihdr = Some(parse_ihdr(p.1).unwrap());
+                image.ihdr = Some(parse_ihdr(p.1)?);
                 info!("IHDR: {:?}", image.ihdr);
             }
             "IDAT" => {
-                image.idat.extend(parse_idat(p.1).unwrap().data);
+                image.idat.extend(parse_idat(p.1)?.data);
                 info!("IDAT: new chunk added");
+            }
+            "PLTE" => {
+                image.color_index = Some(parse_plte(p.1)?);
             }
             "IEND" => {
                 image.has_end = true;
-                info!("IEND: {}", parse_iend(p.1).unwrap());
+                info!("IEND: {}", parse_iend(p.1)?);
             }
             "tEXt" => {
-                parse_text(p.1).unwrap();
+                let txt = parse_text(p.1);
+                match txt {
+                    Err(e) => error!("Cannot parse tEXt chunk: {:?}", e),
+                    Ok(t) => warn!("Do someting with tEXt: {}", t)
+                }
             }
             "zTXt" => {
-                parse_ztxt(p.1).unwrap();
+                let ztxt = parse_ztxt(p.1);
+                match ztxt {
+                    Err(e) => error!("Cannot parse zTXt chunk: {:?}", e),
+                    Ok(_t) => warn!("Do someting with zTXt")
+                }
             }
             "pHYs" => {
-                parse_phys(p.1).unwrap();
+                let phys = parse_phys(p.1);
+                match phys {
+                    Err(e) => error!("Cannot parse pHYs chunk: {:?}", e),
+                    Ok(_t) => warn!("Do someting with pHYs")
+                }
             }
             "tIME" => {
-                parse_time(p.1).unwrap();
+                let time = parse_time(p.1);
+                match time {
+                    Err(e) => error!("Cannot parse tIME chunk: {:?}", e),
+                    Ok(_t) => warn!("Do someting with tIME")
+                }                
             }
-            "PLTE" => {
-                image.color_index = Some(parse_plte(p.1).unwrap());
-            }
-            name => warn!("no parsing for chunk: {}", name)
+            name => {
+                warn!("no parsing for chunk: {}", name);
+                let first_letter: char = name.chars().nth(0).unwrap();
+                if first_letter.is_ascii_uppercase() {
+                    return Err(ImageError::Decoding(DecodingError { str: format!("No parsing for mandotary chunk {}", name)}));
+                }
+            } 
         }
 
         suite = p.0;

@@ -1,5 +1,5 @@
 
-pub use self::png::{PngImage, parse_png};
+pub use self::png::{PngImage};
 
 mod png;
 
