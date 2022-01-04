@@ -257,7 +257,24 @@ impl PngImage {
             ColorType::TrueColor => {
                 ret = img;
             }
-            _ => todo!("Colortype")
+            ColorType::GrayScale => {
+                ret = Vec::with_capacity((self.nb_pixels() * 3) as usize);
+
+                for b in img {
+                    ret.push(b);
+                    ret.push(b);
+                    ret.push(b);
+                }
+            }
+            ColorType::GrayScaleAlpha => {
+                ret = Vec::with_capacity((self.nb_pixels() * 3) as usize);
+
+                for b in img.chunks(2) {
+                    ret.push(b[0]);
+                    ret.push(b[0]);
+                    ret.push(b[0]);
+                }
+            }
         }
         return ret;
     }
