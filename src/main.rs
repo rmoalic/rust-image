@@ -2,6 +2,9 @@ use std::fs::File;
 use std::path::Path;
 use std::env;
 
+#[macro_use]
+extern crate log;
+
 mod error;
 mod image;
 mod codecs {
@@ -15,6 +18,9 @@ use crate::image::WriteImage;
 use crate::image::ReadImage;
 
 fn main() {
+    env_logger::builder()
+        .format_timestamp(None)
+        .init();
     let args: Vec<String> = env::args().collect();
     
     let path = Path::new(&args[1]);

@@ -29,7 +29,6 @@ impl Chunk<'_> {
         hasher.update(self.name.as_bytes());
         hasher.update(self.data);
         let computed_crc: u32 = hasher.finalize();
-
         return computed_crc == self.crc;
     }
 }
@@ -231,7 +230,7 @@ impl PngImage {
             let filter_method = FilterType::from_u8(scanline[0]);
             let sl = scanline[1..].as_mut();
             
-            println!("method: {:?}", filter_method);
+            debug!("method: {:?}", filter_method);
             
             self.filter_scanline(prev_scanline, sl, filter_method);
             ret.extend_from_slice(sl);
@@ -254,7 +253,7 @@ impl PngImage {
 //                ret = vec!(0u8; (self.nb_pixels() * 3) as usize);
 
                 for (i, b) in img.chunks(4).enumerate() {
-  //                  println!("{}: {:?}", i ,b );
+  //                  debug!("{}: {:?}", i ,b );
                     ret.push(b[0]);
                     ret.push(b[1]);
                     ret.push(b[2]);
@@ -355,7 +354,7 @@ fn parse_text(text_chunk: Chunk) -> Result<&str, nom::Err<Error<&[u8]>>> {
     assert_eq!(text_chunk.name, "tEXt");
 
     let text = str::from_utf8(text_chunk.data).unwrap();
-    println!("text: {}", text);
+    info!("text: {}", text);
 
     return Ok(&text);
 }
@@ -370,7 +369,7 @@ fn parse_ztxt(text_chunk: Chunk) -> Result<(&str, String), nom::Err<Error<&[u8]>
 
     let decoded = decompress_to_vec_zlib(r).unwrap();
     let text = String::from_utf8(decoded).unwrap();
-    println!("ztxt {}: {}", keyword_utf, text);
+    info!("ztxt {}: {}", keyword_utf, text);
 
     return Ok((&keyword_utf, text));
 }
@@ -383,9 +382,9 @@ fn parse_phys(chunk: Chunk) -> Result<(u32, u32, bool), nom::Err<Error<&[u8]>>> 
     let (_r, unit) = be_u8(r)?;
 
     if unit == 0 {
-        println!("phys: ppuX: {} ppuY: {}", ppux, ppuy);
+        info!("phys: ppuX: {} ppuY: {}", ppux, ppuy);
     } else if unit == 1 {
-        println!("phys: ppuX: {}m ppuY: {}m", ppux, ppuy);
+        info!("phys: ppuX: {}m ppuY: {}m", ppux, ppuy);
     } else {
         panic!("unknown unit");
     }
@@ -399,7 +398,7 @@ fn parse_time(chunk: Chunk) -> Result<u8, nom::Err<Error<&[u8]>>> {
 
     let (_, (year, month, day, hour, minute, second)) = tuple((be_u16, u8, u8, u8, u8, u8))(chunk.data)?;
 
-    println!("time: {}-{:#02}-{:#02} {:#02}:{:#02}:{:#02}", year, month, day, hour, minute, second);
+    info!("time: {}-{:#02}-{:#02} {:#02}:{:#02}:{:#02}", year, month, day, hour, minute, second);
 
     Ok(0)
 }
@@ -411,7 +410,7 @@ fn parse_plte(chunk: Chunk) -> Result<Vec<(u8, u8, u8)>, nom::Err<Error<&[u8]>>>
 
     let (_, colors) = count(tuple((u8, u8, u8)), nb_colors as usize)(chunk.data)?;
 
-    println!("plte: {:?}", colors);
+    info!("plte: {:?}", colors);
 
     Ok(colors)
 }
@@ -424,7 +423,7 @@ fn parse_chunk(chunk: &[u8]) -> IResult<&[u8], Chunk> {
 
     let name = str::from_utf8(name_bytes).unwrap();
 
-    println!("\tChunk name: {}, size: {}, crc: {}", name, len, crc);
+    info!("\tChunk name: {}, size: {}, crc: {}", name, len, crc);
 
     let chunk = Chunk { len, name, data, crc };
 
@@ -436,24 +435,25 @@ fn parse_chunk(chunk: &[u8]) -> IResult<&[u8], Chunk> {
 }
 
 pub fn parse_png(chunk: &[u8]) -> IResult<&[u8], PngImage> {
+    debug!("Parsing png");
     let (r, _) = tag([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])(chunk)?;
     let mut suite = r;
     let mut image = PngImage::new();
-    
+
     while suite.len() > 0 {
         let p = parse_chunk(suite)?;
         match p.1.name {
             "IHDR" => {
                 image.ihdr = Some(parse_ihdr(p.1).unwrap());
-                println!("IHDR: {:?}", image.ihdr);
+                info!("IHDR: {:?}", image.ihdr);
             }
             "IDAT" => {
                 image.idat.extend(parse_idat(p.1).unwrap().data);
-                println!("IDAT: new chunk added");
+                info!("IDAT: new chunk added");
             }
             "IEND" => {
                 image.has_end = true;
-                println!("IEND: {}", parse_iend(p.1).unwrap());
+                info!("IEND: {}", parse_iend(p.1).unwrap());
             }
             "tEXt" => {
                 parse_text(p.1).unwrap();
@@ -470,11 +470,11 @@ pub fn parse_png(chunk: &[u8]) -> IResult<&[u8], PngImage> {
             "PLTE" => {
                 image.color_index = Some(parse_plte(p.1).unwrap());
             }
-            name => println!("no parsing for chunk: {}", name)
+            name => warn!("no parsing for chunk: {}", name)
         }
 
         suite = p.0;
     }
-
+    debug!("End of parsing");
     Ok((r, image))
 }
