@@ -22,6 +22,11 @@ fn main() {
         .format_timestamp(None)
         .init();
     let args: Vec<String> = env::args().collect();
+
+    if args.len() < 2 {
+        eprintln!("USAGE: {} file.png", args[0]);
+        std::process::exit(1);
+    }
     
     let path = Path::new(&args[1]);
     let file = File::open(&path).unwrap();
