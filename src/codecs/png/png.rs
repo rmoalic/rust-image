@@ -354,7 +354,9 @@ fn parse_ihdr(ihdr_chunk: Chunk) -> Result<IHDR, ImageError> {
     if ! [0, 1].contains(&interlace_method) {
         return Err(ImageError::Decoding(DecodingError {str: format!("Unknown interlace method {}", interlace_method)}));
     }
-
+    if interlace_method != 0 { //TODO: remove
+        return Err(ImageError::Decoding(DecodingError {str: format!("Unsupported interlace method {}", interlace_method)}));
+    }
     if compression_method != 0 {
         return Err(ImageError::Decoding(DecodingError {str: format!("Unknown compression method {}", compression_method)}));
     }
