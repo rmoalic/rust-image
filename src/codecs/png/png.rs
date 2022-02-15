@@ -53,6 +53,7 @@ pub struct PngImage {
     ihdr: Option<IHDR>,
     idat: Vec<u8>,
     color_index: Option<Vec<(u8, u8, u8)>>,
+    background: Option<(u8, u8, u8)>,
     bpp: usize,
     has_end: bool,
 }
@@ -80,7 +81,7 @@ impl FilterType {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug, PartialEq, PartialOrd, Copy, Clone)]
 #[repr(u8)]
 enum ColorType {
     GrayScale = 0,
@@ -142,6 +143,7 @@ impl PngImage {
             idat: Vec::new(),
             bpp: 0,
             color_index: None,
+            background: None,
             has_end: false,
         }
     }
@@ -237,21 +239,38 @@ impl PngImage {
         return ret;
     }
 
+    fn alpha_coeff(&self, alpha: u8) -> f32 {
+        alpha as f32/ 255.0
+    }
+
+    fn alpha_blend(&self, component_a: u8, component_b: u8, alpha_coeff: f32) -> u8 {
+        (alpha_coeff * component_a as f32 + (1.0 - alpha_coeff) * component_b as f32) as u8
+    }
+
     fn decode_to_rgb(&self) -> Vec<u8> {
         let img = self.decode_scanlines();
         let mut ret: Vec<u8>;
 
         match self.ihdr.as_ref().unwrap().color_type {
             ColorType::IndexedColor => {
+                //TODO: tRNS chunk transparency
                 ret = map_indexed_color(self.color_index.as_ref().unwrap(), &img, (self.nb_pixels() * 3) as usize);
             }
             ColorType::TrueColorAlpha => {
                 ret = Vec::with_capacity((self.nb_pixels() * 3) as usize);
+                let back = self.background.unwrap_or((255, 255, 255));
 
                 for b in img.chunks(4) {
-                    ret.push(b[0]);
-                    ret.push(b[1]);
-                    ret.push(b[2]);
+                    let alpha: f32 = self.alpha_coeff(b[3]);
+                    if alpha == 1.0 {
+                        ret.push(b[0]);
+                        ret.push(b[1]);
+                        ret.push(b[2]);
+                    } else {
+                        ret.push(self.alpha_blend(b[0], back.0, alpha));
+                        ret.push(self.alpha_blend(b[1], back.1, alpha));
+                        ret.push(self.alpha_blend(b[2], back.2, alpha));
+                    }
                 }
             }
             ColorType::TrueColor => {
@@ -268,11 +287,19 @@ impl PngImage {
             }
             ColorType::GrayScaleAlpha => {
                 ret = Vec::with_capacity((self.nb_pixels() * 3) as usize);
+                let back = self.background.unwrap_or((255, 255, 255));
 
                 for b in img.chunks(2) {
-                    ret.push(b[0]);
-                    ret.push(b[0]);
-                    ret.push(b[0]);
+                    let alpha: f32 = self.alpha_coeff(b[1]);
+                    if alpha == 1.0 {
+                        ret.push(b[0]);
+                        ret.push(b[0]);
+                        ret.push(b[0]);
+                    } else {
+                        ret.push(self.alpha_blend(b[0], back.0, alpha));
+                        ret.push(self.alpha_blend(b[0], back.0, alpha));
+                        ret.push(self.alpha_blend(b[0], back.0, alpha));
+                    }
                 }
             }
         }
@@ -443,6 +470,41 @@ fn parse_plte(chunk: Chunk) -> Result<Vec<(u8, u8, u8)>, ImageError> {
     Ok(colors)
 }
 
+fn parse_bkgd(chunk: Chunk, color_type: ColorType, indexed_colors: &Option<Vec<(u8, u8 , u8)>>) -> Result<(u8, u8, u8), ImageError> {
+    assert_eq!(chunk.name, "bKGD");
+
+    let ret: (u8, u8, u8);
+
+    match color_type {
+        ColorType::TrueColor | ColorType::TrueColorAlpha => {
+            let (_, colors) = take(3 as usize)(chunk.data)?;
+            ret = (colors[0], colors[1], colors[2]);
+        }
+        ColorType::GrayScale | ColorType::GrayScaleAlpha => {
+            let (_, color) = take(1 as usize)(chunk.data)?;
+            ret = (color[0], color[0], color[0]);
+        }
+        ColorType::IndexedColor => {
+            let (_, color_index) = be_u8(chunk.data)?;
+            match indexed_colors {
+                None => {
+                    warn!("encontered backgound color of an indexed color image with no index");
+                    ret = (255, 255, 255);
+                }
+                Some(index) => {
+                    let colors = index.get(color_index as usize).unwrap_or(&(255, 255, 255));
+                    ret = (colors.0, colors.1, colors.2);
+                }
+            }
+        }
+    }
+
+    info!("bkgd: {:?}", ret);
+
+    Ok(ret)
+}
+
+
 fn parse_chunk(chunk: &[u8]) -> Result<(&[u8], Chunk), ImageError> {
     let (r, len): (&[u8], u32) = be_u32(chunk)?;
     let (r, name_bytes): (&[u8], &[u8]) = take(4 as u32)(r)?;
@@ -487,6 +549,11 @@ fn parse_png(chunk: &[u8]) -> Result<(&[u8], PngImage), ImageError> {
             "IEND" => {
                 image.has_end = true;
                 info!("IEND: {}", parse_iend(p.1)?);
+            }
+            "bKGD" => {
+                let c: ColorType = image.ihdr.as_ref().unwrap().color_type;
+                let bcolor: (u8, u8, u8) = parse_bkgd(p.1, c, &image.color_index)?;
+                image.background = Some(bcolor);
             }
             "tEXt" => {
                 let txt = parse_text(p.1);
