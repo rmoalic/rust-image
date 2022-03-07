@@ -11,6 +11,7 @@ mod codecs {
     pub mod png;
     pub mod ppm;
 }
+mod hashs;
 
 use crate::codecs::png::*;
 use crate::codecs::ppm::*;

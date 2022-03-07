@@ -17,3 +17,4 @@ Result in ```out.ppm```
 - PNG Filters: https://www.w3.org/TR/PNG-Filters.html
 - Test suite: http://www.schaik.com/pngsuite
 - PPM: https://en.wikipedia.org/wiki/Netpbm#File_formats
+- Adler32: https://fr.wikipedia.org/wiki/Adler-32
