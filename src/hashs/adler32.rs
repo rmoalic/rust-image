@@ -88,3 +88,10 @@ fn test_alder32_big_update_rollover() {
     h.update(&[0xff; 255]);
     assert_eq!(h.finalise(), 0x08f0fe02);
 }
+
+#[test]
+fn test_alder32_big_big_update_rollover() {
+    let mut h = Adler32::new();
+    h.update(&[0xff; 25500]);
+    assert_eq!(h.finalise(), 0x24b03e32);
+}
