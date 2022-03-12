@@ -68,10 +68,6 @@ fn compress(data: &[u8], window_size: usize) -> Vec<(usize, usize, u8)> {
 
         //
 
-        if lenght_of_match == d.len() {
-            break;
-        }
-
         let split_point = (lenght_of_match + 1) as usize;
         if window.len() + split_point > window_size {
             for _ in 0..split_point {
