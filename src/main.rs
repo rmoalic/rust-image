@@ -12,6 +12,7 @@ mod codecs {
     pub mod ppm;
 }
 mod hashs;
+mod compress;
 
 use crate::codecs::png::*;
 use crate::codecs::ppm::*;
