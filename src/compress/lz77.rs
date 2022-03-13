@@ -64,7 +64,12 @@ fn compress(data: &[u8], window_size: usize) -> Vec<(usize, usize, u8)> {
             c = d[0];
         }
 
-        ret.push((start_of_match, lenght_of_match, c));
+        if lenght_of_match > 0 {
+            ret.push((window.len() - start_of_match, lenght_of_match, c));
+        } else {
+            assert!(start_of_match == 0);
+            ret.push((start_of_match, lenght_of_match, c));
+        }
 
         //
 
@@ -85,23 +90,20 @@ fn compress(data: &[u8], window_size: usize) -> Vec<(usize, usize, u8)> {
     return ret;
 }
 
-fn decompress(compressed_data: Vec<(usize, usize, u8)>, window_size: usize) -> Vec<u8> {
-    assert!(window_size >= 2);
+fn decompress(compressed_data: Vec<(usize, usize, u8)>) -> Vec<u8> {
     let mut ret: Vec<u8> = Vec::with_capacity(compressed_data.len());
     let mut curr = 0;
 
     for (pos, len, d) in compressed_data {
         if len > 0 {
             for i in 0..len {
-                ret.push(ret[curr + pos + i]);
+                ret.push(ret[curr - pos + i]);
             }
         }
 
         ret.push(d);
 
-        if ret.len() > window_size {
-            curr += len + 1;
-        }
+        curr += len + 1;
     }
 
     return ret;
@@ -110,30 +112,27 @@ fn decompress(compressed_data: Vec<(usize, usize, u8)>, window_size: usize) -> V
 
 #[test]
 fn test_compress_decompress() {
-    assert_eq!(decompress(compress(b"", 10), 10), b"");
-    assert_eq!(decompress(compress(b"AABCBBABC", 10), 10), b"AABCBBABC");
-    assert_eq!(decompress(compress(b"AABCBBABC", 3), 3), b"AABCBBABC");
-    assert_eq!(decompress(compress(b"Hello friend, Hello world!", 5), 5), b"Hello friend, Hello world!");
-    assert_eq!(decompress(compress(b"Hello friend, Hello world!", 100), 100), b"Hello friend, Hello world!");
-    assert_eq!(decompress(compress(b"Blah blah blah blah blah!", 100), 100), b"Blah blah blah blah blah!");
-    assert_eq!(decompress(compress(b"Blah blah blah blah blah!", 5), 5), b"Blah blah blah blah blah!");
+    assert_eq!(decompress(compress(b"", 10)), b"");
+    assert_eq!(decompress(compress(b"AABCBBABC", 10)), b"AABCBBABC");
+    assert_eq!(decompress(compress(b"AABCBBABC", 3)), b"AABCBBABC");
+    assert_eq!(decompress(compress(b"Hello friend, Hello world!", 5)), b"Hello friend, Hello world!");
+    assert_eq!(decompress(compress(b"Hello friend, Hello world!", 100)), b"Hello friend, Hello world!");
+    assert_eq!(decompress(compress(b"Blah blah blah blah blah!", 100)), b"Blah blah blah blah blah!");
+    assert_eq!(decompress(compress(b"Blah blah blah blah blah!", 5)), b"Blah blah blah blah blah!");
 }
 
 #[test]
 fn test_compress_simple() {
     assert_eq!(compress(b"AABCBBABC", 50),
-               vec!((0, 0, 65), (0, 1, 66), (0, 0, 67), (2, 1, 66), (1, 2, 67)));
+               vec!((0, 0, 65), (1, 1, 66), (0, 0, 67), (2, 1, 66), (5, 2, 67)));
     assert_eq!(compress(b"Hello friend, Hello world!", 50),
-               vec!((0, 0, 72), (0, 0, 101), (0, 0, 108), (2, 1, 111), (0, 0, 32), (0, 0, 102), (0, 0, 114), (0, 0, 105), (1, 1, 110), (0, 0, 100), (0, 0, 44), (5, 1, 72), (1, 5, 119), (4, 1, 114), (2, 1, 100), (0, 0, 33)));
+               vec!((0, 0, 72), (0, 0, 101), (0, 0, 108), (1, 1, 111), (0, 0, 32), (0, 0, 102), (0, 0, 114), (0, 0, 105), (8, 1, 110), (0, 0, 100), (0, 0, 44), (8, 1, 72), (14, 5, 119), (17, 1, 114), (21, 1, 100), (0, 0, 33)));
 }
 
 #[test]
 fn test_compress_overlapping() {
-    let c = compress(b"Blah blah blah blah blah!", 6);
-    assert_eq!(c, vec!((0, 0, 66), (0, 0, 108), (0, 0, 97), (0, 0, 104), (0, 0, 32), (0, 0, 98), (1, 18, 33)));
     let c = compress(b"Blah blah blah blah blah!", 5);
-    assert_eq!(c, vec!((0, 0, 66), (0, 0, 108), (0, 0, 97), (0, 0, 104), (0, 0, 32), (0, 0, 98), (0, 18, 33)));
-
+    assert_eq!(c, vec!((0, 0, 66), (0, 0, 108), (0, 0, 97), (0, 0, 104), (0, 0, 32), (0, 0, 98), (5, 18, 33)));
 }
 
 #[test]
