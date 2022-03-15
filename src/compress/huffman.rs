@@ -120,14 +120,33 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
             assert!(3 == 4);
         }*/
 
-        println!("\n{:b}", branch);
-        let mut curr = self;
+        println!("\n{:b} - {}", branch, branch);
+
+        let mut curr: &mut Node<T> = self;
         let mut i = 32 - lead + 1;
         while i > 0 {            
             match curr {
-                Node::Leaf {val} => {
-                    assert_eq!(*val,  nval);
-                    i -= 1;
+                Node::Leaf {ref val} => {
+                    dbg!(i);
+                    if i <= 1 {
+                        assert_eq!(*val,  nval);
+                        i -= 1;
+                    } else {
+                        let a: bool = (branch & (1 << i - 2)) == 0;
+                        dbg!(a);
+                        let old = *val;
+                        let new;
+                        if a {
+                            new = Box::new(Node::Branch { left: Box::new(Node::Leaf {val: old}), right: Box::new(Node::None) });
+                        } else {
+                            new = Box::new(Node::Branch { left: Box::new(Node::None), right: Box::new(Node::Leaf {val: old}) });
+                        }
+                        *curr = *new;
+                        if let Node::Branch { ref mut left, ref mut right } = curr {
+                            curr = if a { right } else { left };
+                        }
+                        println!("> Replaced Leaf by Node");
+                    }
                 },
                 Node::None => {
                     let new;
@@ -151,6 +170,84 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
         }
     }
 }
+/*
+impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Node::Leaf {ref val} => {
+                write!(f, " {:?}", val)
+            },
+            Node::None => {
+                write!(f, "")
+            }
+            Node::Branch { ref left, ref right } => {
+                write!(f, "\n\t[l:{} \n\tr:{}]", left, right)
+            }
+        }
+    }
+}*/
+
+impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
+    
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        static mut N: u32 = u32::MAX;
+
+        fn print_graph<T: std::fmt::Debug>(g: &Node<T>, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+
+            match g {
+                Node::Leaf { ref val } => {
+                    let t = format!("\t\"{:p}\" -> \"{:?}\" [color=red]\n", g, val);
+                    write!(f, "\t\"{:?}\" [shape=diamond];\n", val)?;
+                    write!(f, "{}", t)?;
+                },
+
+                Node::None => {
+                    unsafe {
+                        let t = format!("\t\"{:p}\" -> \"N{}\" [color=red]\n", g, N);
+                        write!(f, "\t\"N{:?}\" [shape=point];\n", N)?;
+                        write!(f, "{}", t)?;
+                        N -= 1;
+                    }
+                },
+            
+                Node::Branch { ref left, ref right } => {
+                    if let _a @  Node::Branch { .. } = &**left {
+                        let t = format!("\t\"{:p}\" -> \"{:p}\" [label=\"0\"]\n", g, *left);
+                        write!(f, "{}", t)?;
+                    }
+                    print_graph(left, f)?;
+                    
+                    
+                    if let _a @  Node::Branch { .. } = &**right {
+                        let t = format!("\t\"{:p}\" -> \"{:p}\" [label=\"1\"]\n", g, *right);
+                        write!(f, "{}", t)?;
+                    }
+                    print_graph(right, f)?;
+                }
+            }
+            
+            Ok(())
+        }
+
+        
+        match self {
+            Node::Leaf {ref val} => {
+                write!(f, " {:?}", val)?;
+            },
+            Node::None => {
+                write!(f, "")?;
+            }
+            Node::Branch { .. } => {
+                write!(f, "digraph BST {{\n")?;
+
+                print_graph(self, f)?;
+                
+                write!(f, "}}\n")?;
+            }
+        }
+        Ok(())
+    }
+}
 
 #[test]
 fn tree() {
@@ -158,6 +255,7 @@ fn tree() {
 
     for (i, v) in DEFLATE_HUFFMAN_FIXED_CODE_VALUE.iter().enumerate() {
         t.insert(*v, i as u32);
+        println!("{}", t);
     }
     
     println!("{:?}", t);
