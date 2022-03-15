@@ -3,6 +3,8 @@ const MAX_BITS: usize = 10;
 
 const DEFLATE_HUFFMAN_FIXED_CODE_VALUE: [u32;288] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 429, 430, 431, 432, 433, 434, 435, 436, 437, 438, 439, 440, 441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 462, 463, 464, 465, 466, 467, 468, 469, 470, 471, 472, 473, 474, 475, 476, 477, 478, 479, 480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494, 495, 496, 497, 498, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 192, 193, 194, 195, 196, 197, 198, 199];
 
+const DEFLATE_HUFFMAN_FIXED_CODE_LENGHT: [u32;288] = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8];
+
 fn gen_bl_count(code_lenghts: &Vec<u8>) -> Vec<u32> {
    let mut bl_count: Vec<u32> = vec!(0; MAX_BITS);
 
@@ -114,8 +116,8 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
         Node::None
     }
 
-    fn insert(&mut self, branch: u32, nval: T) {
-        let lead = branch.leading_zeros();
+    fn insert(&mut self, branch: u32, code_lenght: u32, nval: T) {
+        let lead = 32 - code_lenght;
         /*if lead == 32 {
             assert!(3 == 4);
         }*/
@@ -133,17 +135,16 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
                         i -= 1;
                     } else {
                         let a: bool = (branch & (1 << i - 2)) == 0;
-                        dbg!(a);
                         let old = *val;
                         let new;
-                        if a {
-                            new = Box::new(Node::Branch { left: Box::new(Node::Leaf {val: old}), right: Box::new(Node::None) });
-                        } else {
+                        if ! a {
                             new = Box::new(Node::Branch { left: Box::new(Node::None), right: Box::new(Node::Leaf {val: old}) });
+                        } else {
+                            new = Box::new(Node::Branch { left: Box::new(Node::Leaf {val: old}), right: Box::new(Node::None) });
                         }
                         *curr = *new;
                         if let Node::Branch { ref mut left, ref mut right } = curr {
-                            curr = if a { right } else { left };
+                            curr = if ! a { left } else { right };
                         }
                         println!("> Replaced Leaf by Node");
                     }
@@ -162,8 +163,8 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
                 Node::Branch { ref mut left, ref mut right } => {
                     let a: bool = (branch & (1 << i - 2)) == 0;
 
-                    println!("| move {}", if a {"r"} else {"l"});
-                    curr = if a { right } else { left };
+                    println!("| move {}", if a {"l"} else {"r"});
+                    curr = if a { left } else { right };
                     i -= 1;
                 },
             }
@@ -247,8 +248,8 @@ impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
                 write!(f, "")?;
             }
             Node::Branch { .. } => {
-                write!(f, "digraph BST {{\n")?;
-                write!(f, "\tnode [shape=plain fontsize=5];")?;
+                write!(f, "digraph {{\n")?;
+                write!(f, "\tnode [shape=plain fontsize=5];\n")?;
 
                 print_graph(self, f)?;
                 
@@ -262,31 +263,43 @@ impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
 
 #[test]
 fn tt() {
-    let mut t: Node<u32> = Node::new();
+    let mut t: Node<char> = Node::new();
 
-    t.insert(0b10, 1);
-//    t.insert(0b0, 2);
-    t.insert(0b110, 3);
-    t.insert(0b111, 4);
+    t.insert(0b10, 2, 'A');
+//    t.insert(0b0, 'B');
+    t.insert(0b110, 3, 'C');
+    t.insert(0b111, 3, 'D');
 
     println!("{}", t);
     assert!(false);
 }
 
-/*
 #[test]
-fn tree() {
+fn t2() {
     let mut t: Node<u32> = Node::new();
-
-    for (i, v) in DEFLATE_HUFFMAN_FIXED_CODE_VALUE.iter().enumerate() {
-        t.insert(*v, i as u32);
+    let cl = vec!(3, 3, 3, 3, 3, 2, 4, 4);
+    for (i, v) in vec!(2, 3, 4, 5, 6, 0, 14, 15).iter().enumerate() {
+        t.insert(*v, cl[i],i as u32);
         println!("{}", t);
     }
     
     println!("{:?}", t);
     assert!(false);
 }
-*/
+
+#[test]
+fn tree() {
+    let mut t: Node<u32> = Node::new();
+
+    for (i, v) in DEFLATE_HUFFMAN_FIXED_CODE_VALUE.iter().enumerate() {
+        t.insert(*v, DEFLATE_HUFFMAN_FIXED_CODE_LENGHT[i], i as u32);
+    }
+    println!("{}", t);
+    
+    println!("{:?}", t);
+    assert!(false);
+}
+
 
 /*
 #[derive(Debug)]
