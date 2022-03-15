@@ -1,4 +1,7 @@
 
+use std::io::Read;
+use bitstream::{BitReader, Padding};
+
 const MAX_BITS: usize = 10;
 
 const DEFLATE_HUFFMAN_FIXED_CODE_VALUE: [u32;288] = [48, 49, 50, 51, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90, 91, 92, 93, 94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115, 116, 117, 118, 119, 120, 121, 122, 123, 124, 125, 126, 127, 128, 129, 130, 131, 132, 133, 134, 135, 136, 137, 138, 139, 140, 141, 142, 143, 144, 145, 146, 147, 148, 149, 150, 151, 152, 153, 154, 155, 156, 157, 158, 159, 160, 161, 162, 163, 164, 165, 166, 167, 168, 169, 170, 171, 172, 173, 174, 175, 176, 177, 178, 179, 180, 181, 182, 183, 184, 185, 186, 187, 188, 189, 190, 191, 400, 401, 402, 403, 404, 405, 406, 407, 408, 409, 410, 411, 412, 413, 414, 415, 416, 417, 418, 419, 420, 421, 422, 423, 424, 425, 426, 427, 428, 429, 430, 431, 432, 433, 434, 435, 436, 437, 438, 439, 440, 441, 442, 443, 444, 445, 446, 447, 448, 449, 450, 451, 452, 453, 454, 455, 456, 457, 458, 459, 460, 461, 462, 463, 464, 465, 466, 467, 468, 469, 470, 471, 472, 473, 474, 475, 476, 477, 478, 479, 480, 481, 482, 483, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494, 495, 496, 497, 498, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510, 511, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 192, 193, 194, 195, 196, 197, 198, 199];
@@ -117,6 +120,11 @@ enum Node<T> {
     None
 }
 
+#[derive(Debug)]
+struct TreeReadError {
+    val: String
+}
+
 impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
 
     fn new() -> Self {
@@ -154,6 +162,36 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
                     curr = if a { left } else { right };
                     i -= 1;
                 },
+            }
+        }
+    }
+
+    fn read_one<R:Read, P:Padding>(&self, br: &mut BitReader<R, P>) -> Result<T, TreeReadError> {
+
+        let mut curr: &Node<T> = self;
+
+        loop {
+
+            match curr {
+                Node::Branch { ref left, ref right } => {
+                    let a_r = br.read_bit();
+                    if ! a_r.is_ok() {
+                        return Err(TreeReadError { val: "IO Error".to_string() });
+                    }
+                    let a_opt = a_r.unwrap();
+                    if ! a_opt.is_some() {
+                        return Err(TreeReadError { val: "IO Decoding Error".to_string() });
+                    }
+                    let a: bool = a_opt.unwrap();
+                    curr = if a { right } else { left };
+                },
+                Node::Leaf { val } => {
+                    return Ok(*val);
+                },
+                Node::None => {
+                    return Err(TreeReadError { val: "Encontered null node".to_string() });
+                }
+
             }
         }
     }
@@ -265,4 +303,23 @@ fn tree_fixed_code_huffman() {
     
     println!("{:?}", t);
     assert!(false);
+}
+
+#[test]
+fn tree_read() {
+    let mut t: Node<char> = Node::new();
+
+    t.insert(0b10, 2, 'A');
+    t.insert(0b0, 1, 'B');
+    t.insert(0b110, 3, 'C');
+    t.insert(0b111, 3, 'D');
+    let v = vec![0b10010110, 0b11001110];
+    let mut d = std::io::Cursor::new(v);
+
+    let mut bit_reader = bitstream::BitReader::new(&mut d);
+    let mut ret: String = String::with_capacity(8);
+    while let Ok(b) = t.read_one(&mut bit_reader) {
+        ret.push(b);
+    }
+    assert_eq!(ret, "ABACCBDB");
 }
