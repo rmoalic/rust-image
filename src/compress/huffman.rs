@@ -192,38 +192,47 @@ impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         static mut N: u32 = u32::MAX;
 
-        fn print_graph<T: std::fmt::Debug>(g: &Node<T>, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-
+        fn print_edge<T: std::fmt::Debug>(g: &Node<T>, p: &Node<T>, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
             match g {
                 Node::Leaf { ref val } => {
-                    let t = format!("\t\"{:p}\" -> \"{:?}\" [color=red]\n", g, val);
-                    write!(f, "\t\"{:?}\" [shape=diamond];\n", val)?;
+                    let t = format!("\t\"{:p}\" -> \"{:?}\" [color=red]\n", p, val);
+                    write!(f, "\t\"{:?}\" [shape=diamond fontsize=14];\n", val)?;
                     write!(f, "{}", t)?;
                 },
 
                 Node::None => {
                     unsafe {
-                        let t = format!("\t\"{:p}\" -> \"N{}\" [color=red]\n", g, N);
+                        let t = format!("\t\"{:p}\" -> \"N{}\" [color=red]\n", p, N);
                         write!(f, "\t\"N{:?}\" [shape=point];\n", N)?;
                         write!(f, "{}", t)?;
                         N -= 1;
                     }
                 },
-            
+                _ => { assert!(false) }
+            }
+            Ok(())
+        }
+
+        fn print_graph<T: std::fmt::Debug>(g: &Node<T>, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+            match g {
                 Node::Branch { ref left, ref right } => {
                     if let _a @  Node::Branch { .. } = &**left {
-                        let t = format!("\t\"{:p}\" -> \"{:p}\" [label=\"0\"]\n", g, *left);
+                        let t = format!("\t\"{:p}\" -> \"{:p}\" [label=\"0\" color=blue]\n", g, *left);
                         write!(f, "{}", t)?;
+                        print_graph(left, f)?;
+                    } else {
+                        print_edge(left, g,  f)?;
                     }
-                    print_graph(left, f)?;
-                    
                     
                     if let _a @  Node::Branch { .. } = &**right {
-                        let t = format!("\t\"{:p}\" -> \"{:p}\" [label=\"1\"]\n", g, *right);
+                        let t = format!("\t\"{:p}\" -> \"{:p}\" [label=\"1\" color=green]\n", g, *right);
                         write!(f, "{}", t)?;
-                    }
-                    print_graph(right, f)?;
-                }
+                        print_graph(right, f)?;
+                    } else {
+                        print_edge(right, g, f)?;
+                    }                   
+                },
+                _ => { assert!(false) }                    
             }
             
             Ok(())
@@ -239,6 +248,7 @@ impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
             }
             Node::Branch { .. } => {
                 write!(f, "digraph BST {{\n")?;
+                write!(f, "\tnode [shape=plain fontsize=5];")?;
 
                 print_graph(self, f)?;
                 
@@ -249,6 +259,21 @@ impl<T: std::fmt::Debug> std::fmt::Display for Node<T> {
     }
 }
 
+
+#[test]
+fn tt() {
+    let mut t: Node<u32> = Node::new();
+
+    t.insert(0b10, 1);
+//    t.insert(0b0, 2);
+    t.insert(0b110, 3);
+    t.insert(0b111, 4);
+
+    println!("{}", t);
+    assert!(false);
+}
+
+/*
 #[test]
 fn tree() {
     let mut t: Node<u32> = Node::new();
@@ -261,6 +286,7 @@ fn tree() {
     println!("{:?}", t);
     assert!(false);
 }
+*/
 
 /*
 #[derive(Debug)]
