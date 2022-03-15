@@ -1,6 +1,6 @@
 
 use std::io::Read;
-use bitstream::{BitReader, Padding};
+use bitstream_io::{BitReader, BitRead, LittleEndian};
 
 const MAX_BITS: usize = 10;
 
@@ -166,7 +166,7 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
         }
     }
 
-    fn read_one<R:Read, P:Padding>(&self, br: &mut BitReader<R, P>) -> Result<T, TreeReadError> {
+    fn read_one<R:Read>(&self, br: &mut BitReader<R, LittleEndian>) -> Result<T, TreeReadError> {
 
         let mut curr: &Node<T> = self;
 
@@ -178,11 +178,7 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
                     if ! a_r.is_ok() {
                         return Err(TreeReadError { val: "IO Error".to_string() });
                     }
-                    let a_opt = a_r.unwrap();
-                    if ! a_opt.is_some() {
-                        return Err(TreeReadError { val: "IO Decoding Error".to_string() });
-                    }
-                    let a: bool = a_opt.unwrap();
+                    let a: bool = a_r.unwrap();
                     curr = if a { right } else { left };
                 },
                 Node::Leaf { val } => {
@@ -316,10 +312,10 @@ fn tree_read() {
     let v = vec![0b10010110, 0b11001110];
     let mut d = std::io::Cursor::new(v);
 
-    let mut bit_reader = bitstream::BitReader::new(&mut d);
+    let mut bit_reader = BitReader::new(&mut d);
     let mut ret: String = String::with_capacity(8);
     while let Ok(b) = t.read_one(&mut bit_reader) {
         ret.push(b);
     }
-    assert_eq!(ret, "ABACCBDB");
+    assert_eq!(ret, "BCABADBB");
 }
