@@ -178,7 +178,7 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
     pub fn read_one<R:Read>(&self, br: &mut BitReader<R, LittleEndian>) -> Result<(u32, T), TreeReadError> {
 
         let mut curr: &Node<T> = self;
-        let mut len: u32 = 1;
+        let mut len: u32 = 0;
 
         loop {
 

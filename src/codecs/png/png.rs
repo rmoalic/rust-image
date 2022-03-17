@@ -11,6 +11,7 @@ use std::ops::Div;
 use std::io::Read;
 
 use crate::image::{GenericImageTo, GenericImage, GenericImageColors, ReadImage};
+use crate::compress::deflate;
 use crate::error::*;
 
 #[derive(Debug)]
@@ -216,7 +217,7 @@ impl PngImage {
     }
     
     fn decode_scanlines(&self) -> Vec<u8> {
-        let mut decoded = decompress_to_vec_zlib(self.idat.as_slice()).unwrap();
+        let mut decoded = deflate::decode(self.idat.as_slice()).unwrap();
         let scanline_len = self.scanline_len() as usize;
 
 

@@ -81,7 +81,6 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                     let (bits, value) = writer.into_unwritten();
 
                     let (len, d): (u16, Vec<u8>) = crate::compress::lzss::lzss_decode(code as u16, &arr, bits as u16, &mut bit_reader)?;
-                    dbg!(&arr);
                     println!("decode {}: {:?}", len, d);
 
                     writer = BitWriter::endian(&mut arr, LittleEndian);
