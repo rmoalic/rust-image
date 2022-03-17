@@ -1,4 +1,5 @@
 
 mod lz77;
+mod lzss;
 mod huffman;
-mod deflate;
+pub mod deflate;

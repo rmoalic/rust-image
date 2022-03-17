@@ -61,6 +61,15 @@ fn generate_tree(code_lenghts: Vec<u8>) -> Node<u32> {
     return tree;
 }
 
+pub fn generate_fixed_deflate_tree() -> Node<u32> {
+    let mut tree: Node<u32> = Node::new();
+
+    for (i, v) in DEFLATE_HUFFMAN_FIXED_CODE_VALUE.iter().enumerate() {
+        tree.insert(*v, DEFLATE_HUFFMAN_FIXED_CODE_LENGHT[i].into(), i as u32);
+    }
+    return tree;
+}
+
 #[test]
 fn test_gen_bl_count() {
     let bl = vec!(3, 3, 3, 3, 3, 2, 4, 4);
@@ -109,7 +118,7 @@ fn test_gen_deflate_fixed_code_values() {
 }
 
 #[derive(Debug)]
-enum Node<T> {
+pub enum Node<T> {
     Branch {
         left : Box<Node<T>>,
         right: Box<Node<T>>
@@ -121,7 +130,7 @@ enum Node<T> {
 }
 
 #[derive(Debug)]
-struct TreeReadError {
+pub struct TreeReadError {
     val: String
 }
 
@@ -166,9 +175,10 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
         }
     }
 
-    fn read_one<R:Read>(&self, br: &mut BitReader<R, LittleEndian>) -> Result<T, TreeReadError> {
+    pub fn read_one<R:Read>(&self, br: &mut BitReader<R, LittleEndian>) -> Result<(u32, T), TreeReadError> {
 
         let mut curr: &Node<T> = self;
+        let mut len: u32 = 1;
 
         loop {
 
@@ -180,9 +190,10 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
                     }
                     let a: bool = a_r.unwrap();
                     curr = if a { right } else { left };
+                    len = len + 1;
                 },
                 Node::Leaf { val } => {
-                    return Ok(*val);
+                    return Ok((len, *val));
                 },
                 Node::None => {
                     return Err(TreeReadError { val: "Encontered null node".to_string() });
@@ -315,7 +326,7 @@ fn tree_read() {
     let mut bit_reader = BitReader::new(&mut d);
     let mut ret: String = String::with_capacity(8);
     while let Ok(b) = t.read_one(&mut bit_reader) {
-        ret.push(b);
+        ret.push(b.1);
     }
     assert_eq!(ret, "BCABADBB");
 }
