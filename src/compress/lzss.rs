@@ -39,7 +39,7 @@ fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitRe
         let min_len: u16 = 35 + (curr - 273) * 8;
         let add: u16 = compressed_data.read(3)?;
         lenght = min_len + add;
-    } else if curr <= 279 {
+    } else if curr <= 280 {
         let min_len: u16 = 67 + (curr - 277) * 16;
         let add: u16 = compressed_data.read(4)?;
         lenght = min_len + add;
@@ -67,6 +67,8 @@ fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitRe
 */
     let curr2: u16 = compressed_data.read(5)?;
 
+    dbg!(curr2);
+
     if curr2 <= 3 {
         distance = curr2 + 1;
     } else {
@@ -83,8 +85,12 @@ fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitRe
 pub fn lzss_decode<R: Read>(curr: u16, decoded_data: &Vec<u8>, missing_bits: u16, compressed_data: &mut BitReader<R, LittleEndian>) -> Result<(u16, Vec<u8>), std::io::Error> {
 
     let (lenght, distance): (u16, u16) = get_block_lenght_and_distance(curr, compressed_data)?;
+    dbg!(lenght, distance, distance as f32 / 8.0);
+    dbg!(decoded_data.len());
+    dbg!(missing_bits);
     assert!(lenght <= LZSS_MAX_LENGHT);
     assert!(distance <= LZSS_MAX_DISTANCE);
+    assert!(distance <= decoded_data.len() as u16);
     
     let mut ret = vec![0; lenght as usize];
     let mut seq = vec![0; distance as usize];
@@ -92,10 +98,20 @@ pub fn lzss_decode<R: Read>(curr: u16, decoded_data: &Vec<u8>, missing_bits: u16
     let cursor = std::io::Cursor::new(decoded_data);
     let mut bit_reader: BitReader<std::io::Cursor<&Vec<u8>>, LittleEndian> = BitReader::new(cursor);
 
+
     let pos = (decoded_data.len() as u32 * 8) + missing_bits as u32;
+
+    dbg!(pos, distance * 8);
     let skip = pos - (distance * 8) as u32;
+    /*
+    let skip = if pos > (distance * 8) as u32 {
+        0
+    } else {
+        pos - (distance * 8) as u32
+    };*/
+
     bit_reader.skip(skip)?;
-    
+
     bit_reader.read_bytes(&mut seq)?;
     bit_reader.into_unread();
 

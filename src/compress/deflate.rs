@@ -58,7 +58,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                 let len: u16 = bit_reader.read(16)?;
                 let nlen: u16 = bit_reader.read(16)?;
                 assert_eq!(len , !nlen);
-                let mut data = Vec::<u8>::with_capacity(len as usize);
+                let mut data = vec!(0; len as usize);
                 bit_reader.read_bytes(data.as_mut())?;
                 ret.extend(data); //TODO: improve copy (double copy)
             },
@@ -70,15 +70,17 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                 while let Ok((code_len, code)) = fixed_tree.read_one(&mut bit_reader) {
                     println!("{}\t({}): {}", code, code as u8 as char, code_len);
                     if code <= 255 {
-                        writer.write(code_len, code)?;
-                        written += code_len;
+                        writer.write(8, code)?;
+                        written += 8;
                         continue;
                     }
                     if code == 256 {
                         break;
                     }
                     writer.flush()?;
+
                     let (bits, value) = writer.into_unwritten();
+                    dbg!(written as f64, &arr);
 
                     let (len, d): (u16, Vec<u8>) = crate::compress::lzss::lzss_decode(code as u16, &arr, bits as u16, &mut bit_reader)?;
                     println!("decode {}: {:?}", len, d);
@@ -87,14 +89,25 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                     writer.write(bits, value)?;
                     writer.write_bytes(&d)?;
 
-                    written += len as u32;
+                    written += (len * 8) as u32;
                 }
                 writer.write(written % 8, 0u8)?;
                 writer.into_writer();
 
+                dbg!(written as f64, &arr);
+                
                 ret.extend(arr);
             },
             DeflateCompression::Dynamic => {
+                let block: u16 = bit_reader.read(14)?;
+                println!("{:b}", block);
+                dbg!(block);
+/*                let hlit: u16 = bit_reader.read(8)?;
+                let hdis: u16 = bit_reader.read(5)?;
+                let hclen: u16 = bit_reader.read(4)?;
+                println!("{:b}", hlit);
+                dbg!(hlit, hdis, hclen);
+*/
                 unimplemented!();
             }
         }
@@ -113,6 +126,13 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 }
 
 #[test]
+fn test_decode_no_compress() {
+    let code = vec!(120, 1, 1, 21, 0, 234, 255, 72, 101, 108, 108, 111, 32, 98, 108, 97, 104, 32, 98, 108, 97, 104, 32, 98, 108, 97, 104, 33, 81, 157, 7, 59);
+    let res = decode(&code[..]).unwrap();
+    assert_eq!(res, b"Hello blah blah blah!");
+}
+
+#[test]
 fn test_decode_simple() {
     let code = vec!(120, 156, 243, 72, 205, 201, 201, 87, 40, 73, 45, 46, 81, 48, 52, 50, 6, 0, 37, 76, 4, 139);
     let res = decode(&code[..]).unwrap();
@@ -124,4 +144,11 @@ fn test_decode_repeating() {
     let code = vec!(120, 156, 243, 72, 205, 201, 201, 87, 72, 202, 73, 204, 64, 16, 138, 0, 81, 157, 7, 59);
     let res = decode(&code[..]).unwrap();
     assert_eq!(res, b"Hello blah blah blah!");
+}
+
+#[test]
+fn test_decode_repeating2() {
+    let code = vec!(120, 156, 243, 72, 205, 201, 201, 87, 72, 202, 73, 204, 64, 16, 138, 10, 41, 249, 5, 48, 92, 2, 0, 205, 203, 11, 216);
+    let res = decode(&code[..]).unwrap();
+    assert_eq!(res, b"Hello blah blah blah! dop dop dopt");
 }
