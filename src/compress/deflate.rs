@@ -1,11 +1,3 @@
-extern crate nom;
-
-/*
-use nom::bytes::complete::*;
-use nom::number::complete::*;
-use nom::sequence::{tuple, terminated};
-use nom::multi::count;
- */
 use bitstream_io::{BitReader, BitRead, BitWriter, BitWrite, LittleEndian};
 
 #[derive(Debug)]

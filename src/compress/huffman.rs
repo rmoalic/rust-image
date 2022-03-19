@@ -70,6 +70,15 @@ pub fn generate_fixed_deflate_tree() -> Node<u32> {
     return tree;
 }
 
+pub fn generate_fixed_deflate_distance_tree() -> Node<u32> {
+    let mut tree: Node<u32> = Node::new();
+
+    for i in 0..30 {
+        tree.insert(i, 5u32, i);
+    }
+    return tree;
+}
+
 #[test]
 fn test_gen_bl_count() {
     let bl = vec!(3, 3, 3, 3, 3, 2, 4, 4);

@@ -1,6 +1,7 @@
 
 use std::io::Read;
 use bitstream_io::{BitReader, BitRead, LittleEndian};
+use crate::compress::huffman;
 
 const LZSS_MAX_DISTANCE: u16 = 32_768;
 const LZSS_MAX_LENGHT: u16 = 258;
@@ -24,7 +25,6 @@ fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitRe
   265   1  11,12      275   3   51-58     285   0    258
   266   1  13,14      276   3   59-66
 */
-    
     if curr <= 264 {
         lenght = 3 + (curr - 257);
     } else if curr <= 268 {
@@ -64,10 +64,11 @@ fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitRe
    7   2  13-16   17   7    385-512   27   12 12289-16384
    8   3  17-24   18   8    513-768   28   13 16385-24576
    9   3  25-32   19   8   769-1024   29   13 24577-32768
-*/
-    let curr2: u16 = compressed_data.read(5)?;
-
-    dbg!(curr2);
+     */
+    let tree: huffman::Node<u32> = huffman::generate_fixed_deflate_distance_tree(); //TODO: cache
+    let (len2, currd): (u32, u32) = tree.read_one(compressed_data).unwrap();
+    assert_eq!(len2, 5);
+    let curr2 = currd as u16;
 
     if curr2 <= 3 {
         distance = curr2 + 1;
@@ -76,6 +77,7 @@ fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitRe
         assert!(extra_bits <= 13);
         let base: u16 = curr2 + 1;
         let add: u16 = compressed_data.read(extra_bits.into())?;
+        dbg!(base, extra_bits, add);
         distance = base + add;
     }
     
@@ -103,12 +105,6 @@ pub fn lzss_decode<R: Read>(curr: u16, decoded_data: &Vec<u8>, missing_bits: u16
 
     dbg!(pos, distance * 8);
     let skip = pos - (distance * 8) as u32;
-    /*
-    let skip = if pos > (distance * 8) as u32 {
-        0
-    } else {
-        pos - (distance * 8) as u32
-    };*/
 
     bit_reader.skip(skip)?;
 
