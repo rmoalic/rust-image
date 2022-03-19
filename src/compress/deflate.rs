@@ -1,4 +1,6 @@
 use bitstream_io::{BitReader, BitRead, BitWriter, BitWrite, LittleEndian};
+use std::convert::TryInto;
+use crate::hashs::adler32::Adler32;
 
 #[derive(Debug)]
 enum DeflateCompression {
@@ -11,15 +13,12 @@ enum DecodeError {
     
 }
 
-pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
-    let mut bit_reader: BitReader<&[u8], LittleEndian> = BitReader::new(data);
-    let mut ret: Vec<u8> = Vec::new();
-    println!("{:?}", data);
-
-
-    let cmf: u8 = bit_reader.read(8)?;
-    let flg: u8 = bit_reader.read(8)?;
-
+pub fn decode_zlib(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+    assert!(data.len() >= 5);
+    let len = data.len();
+    let cmf: u8 = data[0];
+    let flg: u8 = data[1];
+    
     assert_eq!((cmf & 0b1111), 8); // CM is deflate
     assert!((cmf >> 4) <= 7); // Cinfo <= 7
     assert_eq!((((cmf as u16) << 8) & flg as u16) % 31, 0);
@@ -29,6 +28,25 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
     
     let compression_level: u8 = flg & 0b111;
     dbg!(compression_level);
+
+    let compressed_data = &data[2..len - 4];
+
+    let adler: u32 = u32::from_be_bytes(data[len - 4 ..].try_into().unwrap());
+    /*let mut hash = Adler32::new();
+    hash.update(&compressed_data);
+    let calculated_hash = hash.finalise();
+    assert_eq!(adler, calculated_hash);*/
+    //TODO: check adler32
+
+    let ret = decode(compressed_data)?;
+
+    return Ok(ret);
+}
+
+pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
+    let mut bit_reader: BitReader<&[u8], LittleEndian> = BitReader::new(data);
+    let mut ret: Vec<u8> = Vec::new();
+    println!("{:?}", data);
 
     let fixed_tree = crate::compress::huffman::generate_fixed_deflate_tree(); //TODO: cache Tree;
     
@@ -107,8 +125,7 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 
         if bfinal { break; }
     }
-    let adler: u32 = bit_reader.read(32)?;
-    //TODO: check adler32
+
     let mut last = bit_reader.read_bit();
     while ! last.is_err() {
         println!("Error not empty: {}", last.unwrap());
@@ -120,27 +137,27 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
 #[test]
 fn test_decode_no_compress() {
     let code = vec!(120, 1, 1, 21, 0, 234, 255, 72, 101, 108, 108, 111, 32, 98, 108, 97, 104, 32, 98, 108, 97, 104, 32, 98, 108, 97, 104, 33, 81, 157, 7, 59);
-    let res = decode(&code[..]).unwrap();
+    let res = decode_zlib(&code[..]).unwrap();
     assert_eq!(res, b"Hello blah blah blah!");
 }
 
 #[test]
 fn test_decode_simple() {
     let code = vec!(120, 156, 243, 72, 205, 201, 201, 87, 40, 73, 45, 46, 81, 48, 52, 50, 6, 0, 37, 76, 4, 139);
-    let res = decode(&code[..]).unwrap();
+    let res = decode_zlib(&code[..]).unwrap();
     assert_eq!(res, b"Hello test 123");
 }
 
 #[test]
 fn test_decode_repeating() {
     let code = vec!(120, 156, 243, 72, 205, 201, 201, 87, 72, 202, 73, 204, 64, 16, 138, 0, 81, 157, 7, 59);
-    let res = decode(&code[..]).unwrap();
+    let res = decode_zlib(&code[..]).unwrap();
     assert_eq!(res, b"Hello blah blah blah!");
 }
 
 #[test]
 fn test_decode_repeating2() {
     let code = vec!(120, 156, 243, 72, 205, 201, 201, 87, 72, 202, 73, 204, 64, 16, 138, 10, 41, 249, 5, 48, 92, 2, 0, 205, 203, 11, 216);
-    let res = decode(&code[..]).unwrap();
+    let res = decode_zlib(&code[..]).unwrap();
     assert_eq!(res, b"Hello blah blah blah! dop dop dopt");
 }

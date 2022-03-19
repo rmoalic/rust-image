@@ -1,14 +1,14 @@
 
 const MOD_ADLER32: u32 = 65521;
 
-struct Adler32 {
+pub struct Adler32 {
     s1: u32,
     s2: u32,
     count: u16,
 }
 
 impl Adler32 {
-    fn new() -> Adler32 {
+    pub fn new() -> Adler32 {
         Adler32 {
             s1: 1,
             s2: 0,
@@ -16,7 +16,7 @@ impl Adler32 {
         }
     }
 
-    fn update(&mut self, data: &[u8]) {
+    pub fn update(&mut self, data: &[u8]) {
         for d in data {
             self.s1 = self.s1 + *d as u32;
             self.s2 = self.s2 + self.s1;
@@ -30,7 +30,7 @@ impl Adler32 {
         }
     }
 
-    fn finalise(&mut self) -> u32 {
+    pub fn finalise(&mut self) -> u32 {
         self.s1 = self.s1 % MOD_ADLER32;
         self.s2 = self.s2 % MOD_ADLER32;
 

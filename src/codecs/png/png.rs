@@ -217,7 +217,9 @@ impl PngImage {
     }
     
     fn decode_scanlines(&self) -> Vec<u8> {
-        let mut decoded = deflate::decode(self.idat.as_slice()).unwrap();
+        let mut decoded = deflate::decode_zlib(self.idat.as_slice()).unwrap();
+        let decoded2 = decompress_to_vec_zlib(self.idat.as_slice()).unwrap(); //TODO: remove
+        assert_eq!(decoded, decoded2);
         let scanline_len = self.scanline_len() as usize;
 
 

@@ -1,2 +1,2 @@
 
-mod adler32;
+pub mod adler32;
