@@ -1,5 +1,6 @@
 
 use std::io::Read;
+use std::cmp;
 use bitstream_io::{BitReader, BitRead, LittleEndian};
 use crate::compress::huffman;
 
@@ -90,39 +91,47 @@ pub fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut B
     return Ok((lenght, distance));
 }
 
-pub fn lzss_decode<R: Read>(curr: u16, decoded_data: &Vec<u8>, missing_bits: u16, compressed_data: &mut BitReader<R, LittleEndian>, compressed_raw: &[u8]) -> Result<(u16, Vec<u8>), std::io::Error> {
+pub fn lzss_decode(raw: &Vec<LzssCode>) -> Vec<u8> {
+    let mut ret = Vec::with_capacity(raw.len());
+    for (i, code) in raw.iter().enumerate() {
+        match code {
+            LzssCode::Val {code} => {
+                ret.push(*code);
+            },
+            LzssCode::Block {lenght, distance} => {
+                dbg!(lenght, distance);
+                
+                let pos = i - 1;
+                let size: usize = cmp::min(*lenght as usize, *distance as usize);
 
-    let (lenght, distance): (u16, u16) = get_block_lenght_and_distance(curr, compressed_data)?;
-    dbg!(lenght, distance);
-    dbg!(decoded_data.len());
-    dbg!(missing_bits);
-    assert!(lenght <= LZSS_MAX_LENGHT);
-    assert!(distance <= LZSS_MAX_DISTANCE);
-    assert!(distance <= decoded_data.len() as u16);
-    
-    let mut ret = vec![0; lenght as usize];
-    let mut seq = vec![0; distance as usize];
+                let mut count_r = 0;
+                let mut count = 0;
+                while count_r < *distance {
+                    let v = &raw[pos - count_r as usize];
+                    match v {
+                        LzssCode::Val {..} => {count_r += 1},
+                        LzssCode::Block {..} => {count_r += 2},
+                    }
+                    count += 1;
+                }
 
-    let cursor = std::io::Cursor::new(compressed_raw);
-    let mut bit_reader: BitReader<std::io::Cursor<&[u8]>, LittleEndian> = BitReader::new(cursor);
-
-
-    let pos = (decoded_data.len() as u32 * 8) + missing_bits as u32;
-
-    dbg!(pos /8, distance, (pos - (distance * 8) as u32) / 8);
-    let skip = pos - (distance * 8) as u32;
-
-    bit_reader.skip(skip)?;
-
-    bit_reader.read_bytes(&mut seq)?;
-    bit_reader.into_unread();
-
-    let mut s = seq.iter().cycle();
-
-    for b in &mut ret {
-        *b = *s.next().unwrap();
+                let slice_v = (pos - count + 1) as usize .. (pos - count + size + 1) as usize;
+                assert_eq!(slice_v.len(), size as usize);
+                let val = &raw[slice_v];
+                dbg!(val);
+                let mut s = val.iter().cycle();
+                for _ in 0..*lenght as usize {
+                    match *s.next().unwrap() {
+                        LzssCode::Val {code} => {
+                            ret.push(code);
+                        },
+                        _ => {
+                            unimplemented!()
+                        }
+                    }
+                }
+            } 
+        }
     }
-    dbg!(String::from_utf8_lossy(&ret));
-
-    Ok((lenght, ret))
+    return ret;
 }

@@ -1,8 +1,7 @@
 use bitstream_io::{BitReader, BitRead, BitWriter, BitWrite, LittleEndian};
 use std::convert::TryInto;
 use crate::hashs::adler32::Adler32;
-use crate::compress::lzss::{LzssCode, get_block_lenght_and_distance};
-use std::cmp;
+use crate::compress::lzss::{LzssCode, get_block_lenght_and_distance, lzss_decode};
 
 
 #[derive(Debug)]
@@ -77,9 +76,6 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
             },
             DeflateCompression::Fixed => {
                 let mut raw: Vec<LzssCode> = Vec::new();
-                let mut arr: Vec<u8> = Vec::new();
-                let mut writer = BitWriter::endian(&mut arr, LittleEndian);
-                let mut written: u32 = 0;
 
                 while let Ok((_code_len, code)) = fixed_tree.read_one(&mut bit_reader) {
                     if code <= 255 {
@@ -93,88 +89,8 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                     raw.push(LzssCode::Block{lenght: lenght, distance: distance});
                 }
                 
-                for (i, code) in raw.iter().enumerate() {
-                    match code {
-                        LzssCode::Val {code} => {
-                            writer.write(8, *code)?;
-                            written += 8;    
-                        },
-                        LzssCode::Block {lenght, distance} => {
-                            dbg!(lenght, distance);
-                            
-                            let pos = i - 1;
-                            let size: usize = cmp::min(*lenght as usize, *distance as usize);
-
-                            let mut count_r = 0;
-                            let mut count = 0;
-                            while count_r < *distance {
-                                let v = &raw[pos - count_r as usize];
-                                match v {
-                                    LzssCode::Val {..} => {count_r += 1},
-                                    LzssCode::Block {..} => {count_r += 2},
-                                }
-                                count += 1;
-                            }
-
-                            let slice_v = (pos - count + 1) as usize .. (pos - count + size + 1) as usize;
-                            assert_eq!(slice_v.len(), size as usize);
-                            let val = &raw[slice_v];
-                            dbg!(val);
-                            let mut s = val.iter().cycle();
-                            for _ in 0..*lenght as usize {
-                                match *s.next().unwrap() {
-                                    LzssCode::Val {code} => {
-                                        writer.write(8, code)?;
-                                        written += 8;    
-                                    },
-                                    _ => {
-                                        unimplemented!()
-                                    }
-                                }
-                            }
-                        } 
-                    }
-
-                }
-                
-                writer.write(written % 8, 0u8)?;
-                writer.into_writer();
-
-                dbg!(written as f64, &arr);
-                
-                ret.extend(arr);
-
-                /*
-                for code in raw {
-                    println!("{}\t({})", code, code as u8 as char);
-                    if code <= 255 {
-                        writer.write(8, code)?;
-                        written += 8;
-                        continue;
-                    }
-                    if code == 256 {
-                        break;
-                    }
-                    writer.flush()?;
-
-                    let (bits, value) = writer.into_unwritten();
-                    dbg!(written as f64, &arr);
-
-                    let (len, d): (u16, Vec<u8>) = crate::compress::lzss::lzss_decode(code as u16, &arr, bits as u16, &mut bit_reader, data)?;
-                    println!("decode {}: {:?}", len, d);
-
-                    writer = BitWriter::endian(&mut arr, LittleEndian);
-                    writer.write(bits, value)?;
-                    writer.write_bytes(&d)?;
-
-                    written += (len * 8) as u32;
-                }
-                writer.write(written % 8, 0u8)?;
-                writer.into_writer();
-
-                dbg!(written as f64, &arr);
-                
-                ret.extend(arr);*/
+                let decoded: Vec<u8> = lzss_decode(&raw);
+                ret.extend(decoded);
             },
             DeflateCompression::Dynamic => {
                 let block: u16 = bit_reader.read(14)?;
