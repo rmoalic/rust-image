@@ -3,14 +3,28 @@ use std::io::Read;
 use std::cmp;
 use bitstream_io::{BitReader, BitRead, LittleEndian};
 use crate::compress::huffman;
+use std::fmt::Debug;
 
 const LZSS_MAX_DISTANCE: u16 = 32_768;
 const LZSS_MAX_LENGHT: u16 = 258;
 
-#[derive(Debug)]
 pub enum LzssCode {
     Val {code: u8},
     Block {lenght: u16, distance: u16}
+}
+
+impl Debug for LzssCode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
+        match self {
+            LzssCode::Val {code} => {
+                write!(f, "{}", *code as char);
+            },
+            LzssCode::Block {lenght, distance} => {
+                write!(f, "({}, {})", *lenght, *distance);
+            }
+        }
+        Ok(())
+     }
 }
 
 pub fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitReader<R, LittleEndian>) -> Result<(u16, u16), std::io::Error> {
@@ -91,7 +105,74 @@ pub fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut B
     return Ok((lenght, distance));
 }
 
+fn find_lower_bound(raw: &Vec<LzssCode>, upper_pos: usize, b_distance: usize) -> usize {
+    if upper_pos == 0 {
+        return 0;
+    }
+    let mut count_r = 0;
+    let mut low = 0;
+    while count_r < b_distance {
+        let v = &raw[upper_pos - low as usize];
+        match v {
+            LzssCode::Val {..} => {count_r += 1},
+            LzssCode::Block {..} => {count_r += 2},
+        }
+        low += 1;
+    }
+    return upper_pos - low;
+}
+
+fn find_upper_bound(raw: &Vec<LzssCode>, lower_pos: usize, b_lenght: usize) -> usize {
+    let mut count_r = 0;
+    let mut up = 0;
+    while count_r < b_lenght {
+        let v = &raw[lower_pos + up as usize];
+        match v {
+            LzssCode::Val {..} => {count_r += 1},
+            LzssCode::Block {lenght, ..} => {count_r += *lenght as usize},
+        }
+        up += 1;
+    }
+    return lower_pos + up;
+}
+
+fn decode_block(raw: &Vec<LzssCode>, pos: usize, b_lenght: usize, b_distance: usize) -> Vec<u8> {
+    let mut ret: Vec<u8> = Vec::new();
+    let size: usize = cmp::min(b_lenght, b_distance);
+
+    let low = find_lower_bound(&raw, pos, b_distance) + 1;
+    let up = find_upper_bound(&raw, low, size);
+
+    let val = &raw[low .. up];
+    dbg!(low..up);
+    dbg!(val);
+    let mut s = val.iter().cycle();
+    let mut added_val = 0;
+    let mut pos_block = 0;
+    while added_val < b_lenght {
+        match *s.next().unwrap() {
+            LzssCode::Val {code} => {
+                ret.push(code);
+                added_val += 1;
+            },
+            LzssCode::Block {lenght, distance} => {
+                let decoded_block = decode_block(&raw, pos_block, lenght as usize, distance as usize);
+                for b in decoded_block {
+                    if added_val < b_lenght {
+                        ret.push(b);
+                        added_val += 1;
+                    }
+                }
+            }
+        }
+        pos_block = (pos_block + 1) % val.len();
+    }
+    dbg!(String::from_utf8_lossy(&ret));
+    return ret;
+}
+
 pub fn lzss_decode(raw: &Vec<LzssCode>) -> Vec<u8> {
+    dbg!(raw);
     let mut ret = Vec::with_capacity(raw.len());
     for (i, code) in raw.iter().enumerate() {
         match code {
@@ -100,38 +181,11 @@ pub fn lzss_decode(raw: &Vec<LzssCode>) -> Vec<u8> {
             },
             LzssCode::Block {lenght, distance} => {
                 dbg!(lenght, distance);
+                ret.extend(decode_block(&raw, i - 1, *lenght as usize, *distance as usize));
+            }
                 
-                let pos = i - 1;
-                let size: usize = cmp::min(*lenght as usize, *distance as usize);
-
-                let mut count_r = 0;
-                let mut count = 0;
-                while count_r < *distance {
-                    let v = &raw[pos - count_r as usize];
-                    match v {
-                        LzssCode::Val {..} => {count_r += 1},
-                        LzssCode::Block {..} => {count_r += 2},
-                    }
-                    count += 1;
-                }
-
-                let slice_v = (pos - count + 1) as usize .. (pos - count + size + 1) as usize;
-                assert_eq!(slice_v.len(), size as usize);
-                let val = &raw[slice_v];
-                dbg!(val);
-                let mut s = val.iter().cycle();
-                for _ in 0..*lenght as usize {
-                    match *s.next().unwrap() {
-                        LzssCode::Val {code} => {
-                            ret.push(code);
-                        },
-                        _ => {
-                            unimplemented!()
-                        }
-                    }
-                }
-            } 
         }
+        dbg!(String::from_utf8_lossy(&ret));
     }
     return ret;
 }

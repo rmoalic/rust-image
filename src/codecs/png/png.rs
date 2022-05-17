@@ -217,9 +217,9 @@ impl PngImage {
     }
     
     fn decode_scanlines(&self) -> Vec<u8> {
-        let mut decoded = deflate::decode_zlib(self.idat.as_slice()).unwrap();
-        let decoded2 = decompress_to_vec_zlib(self.idat.as_slice()).unwrap(); //TODO: remove
-        assert_eq!(decoded, decoded2);
+        //let mut decoded = deflate::decode_zlib(self.idat.as_slice()).unwrap();
+        let mut decoded = decompress_to_vec_zlib(self.idat.as_slice()).unwrap(); //TODO: remove
+        //assert_eq!(decoded, decoded2);
         let scanline_len = self.scanline_len() as usize;
 
 
@@ -520,9 +520,9 @@ fn parse_chunk(chunk: &[u8]) -> Result<(&[u8], Chunk), ImageError> {
 
     let chunk = Chunk { len, name, data, crc };
 
-    if ! chunk.check_crc() {
-        return Err(ImageError::Decoding(DecodingError::new("Chunk crc error")));
-    }
+    //if ! chunk.check_crc() {
+    //    return Err(ImageError::Decoding(DecodingError::new("Chunk crc error")));
+    //}
 
     Ok((r, chunk))
 }
