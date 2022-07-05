@@ -17,10 +17,10 @@ impl Debug for LzssCode {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> { 
         match self {
             LzssCode::Val {code} => {
-                write!(f, "{}", *code as char);
+                write!(f, "{}", *code as char)?;
             },
             LzssCode::Block {lenght, distance} => {
-                write!(f, "({}, {})", *lenght, *distance);
+                write!(f, "({}, {})", *lenght, *distance)?;
             }
         }
         Ok(())
@@ -143,49 +143,61 @@ fn decode_block(raw: &Vec<LzssCode>, pos: usize, b_lenght: usize, b_distance: us
     let low = find_lower_bound(&raw, pos, b_distance) + 1;
     let up = find_upper_bound(&raw, low, size);
 
-    let val = &raw[low .. up];
-    dbg!(low..up);
-    dbg!(val);
+    let val = &raw[low .. pos + 1];
     let mut s = val.iter().cycle();
     let mut added_val = 0;
     let mut pos_block = 0;
     while added_val < b_lenght {
-        match *s.next().unwrap() {
-            LzssCode::Val {code} => {
-                ret.push(code);
+        match s.next() {
+            Some(LzssCode::Val {code}) => {
+                ret.push(*code);
                 added_val += 1;
             },
-            LzssCode::Block {lenght, distance} => {
-                let decoded_block = decode_block(&raw, pos_block, lenght as usize, distance as usize);
-                for b in decoded_block {
-                    if added_val < b_lenght {
-                        ret.push(b);
-                        added_val += 1;
+            Some(LzssCode::Block {lenght, distance}) => {
+                if pos_block > *distance {
+                    let decoded_block = decode_block(&raw, pos_block as usize, *lenght as usize, *distance as usize);
+                    for b in decoded_block {
+                        if added_val < b_lenght {
+                            ret.push(b);
+                            added_val += 1;
+                        }
                     }
+                } else if pos_block == 0 { 
+                    ret.push(b' ');
+                    added_val +=1;
+                } else {
+                    dbg!("Skip block");
                 }
+            },
+            None => {
+                dbg!("None");
+                break;
             }
         }
-        pos_block = (pos_block + 1) % val.len();
+        pos_block = (pos_block + 1) % val.len() as u16;
     }
+
+    dbg!(low..pos + 1);
+    dbg!(val);
     dbg!(String::from_utf8_lossy(&ret));
     return ret;
 }
 
 pub fn lzss_decode(raw: &Vec<LzssCode>) -> Vec<u8> {
     dbg!(raw);
-    let mut ret = Vec::with_capacity(raw.len());
+    let mut acc = Vec::with_capacity(raw.len());
     for (i, code) in raw.iter().enumerate() {
         match code {
             LzssCode::Val {code} => {
-                ret.push(*code);
+                acc.push(*code);
             },
             LzssCode::Block {lenght, distance} => {
                 dbg!(lenght, distance);
-                ret.extend(decode_block(&raw, i - 1, *lenght as usize, *distance as usize));
+                acc.extend(decode_block(&raw, i - 1, *lenght as usize, *distance as usize));
             }
                 
         }
-        dbg!(String::from_utf8_lossy(&ret));
+        dbg!(String::from_utf8_lossy(&acc));
     }
-    return ret;
+    return acc;
 }
