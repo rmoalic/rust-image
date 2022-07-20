@@ -2,6 +2,7 @@ use bitstream_io::{BitReader, BitRead, BitWriter, BitWrite, LittleEndian};
 use std::convert::TryInto;
 use crate::hashs::adler32::Adler32;
 use crate::compress::lzss::{LzssCode, get_block_lenght_and_distance, lzss_decode};
+use crate::compress::huffman::{generate_dynamic_deflate_tree};
 
 
 #[derive(Debug)]
@@ -93,15 +94,8 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                 ret.extend(decoded);
             },
             DeflateCompression::Dynamic => {
-                let block: u16 = bit_reader.read(14)?;
-                println!("{:b}", block);
-                dbg!(block);
-/*                let hlit: u16 = bit_reader.read(8)?;
-                let hdis: u16 = bit_reader.read(5)?;
-                let hclen: u16 = bit_reader.read(4)?;
-                println!("{:b}", hlit);
-                dbg!(hlit, hdis, hclen);
-*/
+                generate_dynamic_deflate_tree(&mut bit_reader);
+
                 unimplemented!();
             }
         }
