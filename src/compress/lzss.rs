@@ -197,7 +197,7 @@ pub fn lzss_decode(raw: &Vec<LzssCode>) -> Vec<u8> {
             }
                 
         }
-        dbg!(String::from_utf8_lossy(&acc));
+        //dbg!(String::from_utf8_lossy(&acc));
     }
     return acc;
 }

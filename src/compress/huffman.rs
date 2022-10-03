@@ -8,11 +8,6 @@ const DEFLATE_HUFFMAN_FIXED_CODE_VALUE: [u32;288] = [48, 49, 50, 51, 52, 53, 54,
 
 const DEFLATE_HUFFMAN_FIXED_CODE_LENGHT: [u8;288] = [8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 8, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 9, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8, 8, 8, 8];
 
-
-const DEFLATE_HUFFMAN_DYNAMIC_LENGTH_BASE: [u32;31] = [3, 4, 5, 6, 7, 8, 9, 10, 11, 13,  15, 17, 19, 23, 27, 31, 35, 43, 51, 59,  67, 83, 99, 115, 131, 163, 195, 227, 258, 0, 0];
-const DEFLATE_HUFFMAN_DYNAMIC_LENGTH_EXTRA: [u8;31]= [0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0, 0, 0];
-const DEFLATE_HUFFMAN_DYNAMIC_DIST_BASE: [u32;32] = [1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193,  257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577, 0, 0];
-const DEFLATE_HUFFMAN_DYNAMIC_DIST_EXTRA: [u8;30] = [0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13];
 const DEFLATE_HUFFMAN_DYNAMIC_CODE_LENGHT_FOR_CODE_LENGHT: [u8;19] = [16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15];
 
 fn gen_bl_count(code_lenghts: &Vec<u8>) -> Vec<u32> {
@@ -62,6 +57,7 @@ fn generate_tree(code_lenghts: Vec<u8>) -> Node<u32> {
     let mut tree: Node<u32> = Node::new();
 
     for (alphabet_index, value) in code_values.iter().enumerate() {
+//        dbg!(*value, code_lenghts[alphabet_index], alphabet_index as u32);
         tree.insert(*value, code_lenghts[alphabet_index].into(), alphabet_index as u32);
     }
 
@@ -74,6 +70,7 @@ pub fn generate_fixed_deflate_tree() -> Node<u32> {
     for (i, v) in DEFLATE_HUFFMAN_FIXED_CODE_VALUE.iter().enumerate() {
         tree.insert(*v, DEFLATE_HUFFMAN_FIXED_CODE_LENGHT[i].into(), i as u32);
     }
+    
     return tree;
 }
 
@@ -86,7 +83,46 @@ pub fn generate_fixed_deflate_distance_tree() -> Node<u32> {
     return tree;
 }
 
-pub fn generate_dynamic_deflate_tree<R: Read>(bit_reader: &mut BitReader<R, LittleEndian>) -> Result<(), std::io::Error> {
+fn generate_dynamic_deflate_tree_read<R: Read>(codelen_tree: &Node<u32>, bit_reader: &mut BitReader<R, LittleEndian>, size: usize) -> Result<Vec<u8>, std::io::Error> {
+    let mut bitlen: Vec<u8> = Vec::with_capacity(316);
+    let mut last_code: u32 = 0;
+    let mut i: usize = 0;
+    while i < size {
+        let (codelen, code): (u32, u32) = codelen_tree.read_one(bit_reader).unwrap(); //TODO: deal with unwrap
+
+        if code < 16 {
+            bitlen.push(code as u8);
+            i += 1;
+        } else {
+            let mut ncode: u16;
+            let len;
+            if code == 16 {
+                assert_ne!(i, 0);
+                len = last_code;
+                ncode = bit_reader.read(2)?;
+                ncode += 3;
+            } else if code == 17 {
+                len = 0;
+                ncode = bit_reader.read(3)?;
+                ncode += 3;  
+            } else if code == 18 {
+                len = 0;
+                ncode = bit_reader.read(7)?;
+                ncode += 11;
+            } else {
+                unreachable!();
+            }
+            bitlen.append(&mut vec!(len as u8; ncode as usize));
+            i += ncode as usize;
+        }
+        last_code = code;
+    }
+//    assert_eq!(bitlen[256], 0);
+    assert_eq!(bitlen.len(), size);
+    Ok(bitlen)
+}
+
+pub fn generate_dynamic_deflate_tree<R: Read>(bit_reader: &mut BitReader<R, LittleEndian>) -> Result<Node<u32>, std::io::Error> {
     let hlit: u16 = bit_reader.read(5)?;
     let hdis: u16 = bit_reader.read(5)?;
     let hclen: u16 = bit_reader.read(4)?;
@@ -98,18 +134,21 @@ pub fn generate_dynamic_deflate_tree<R: Read>(bit_reader: &mut BitReader<R, Litt
         let cl = DEFLATE_HUFFMAN_DYNAMIC_CODE_LENGHT_FOR_CODE_LENGHT[i as usize];
         bitlen[cl as usize] = bit_reader.read(3)?;
     }
-    dbg!(&bitlen);
-
     let codelen_tree = generate_tree(bitlen);
-    dbg!(&codelen_tree);
 
-
-    for i in 0..hlit + 257 {
-        let (codelen, code): (u32, u32) = codelen_tree.read_one(bit_reader).unwrap(); //TODO: deal with unwrap
-        dbg!(code, codelen);
-    }
-
-    Ok(())
+    let literallenght_tree_bitlen = generate_dynamic_deflate_tree_read(&codelen_tree, bit_reader, (hlit + 257) as usize)?;
+    dbg!("HERE");
+    let literallenght_tree = generate_tree(literallenght_tree_bitlen);
+    println!("{:}", literallenght_tree);
+    
+    let distance_tree_bitlen = generate_dynamic_deflate_tree_read(&codelen_tree, bit_reader, (hdis + 1) as usize)?;
+    dbg!("TOP");
+    let distance_tree = generate_tree(distance_tree_bitlen);
+    println!("{:}", distance_tree);
+    
+    //Ok(code_tree)
+    Ok(literallenght_tree)
+    //Ok((literallenght_tree, distance_tree))
 }
 
 #[test]
@@ -183,25 +222,35 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
     }
 
     fn insert(&mut self, branch: u32, code_lenght: u32, nval: T) {
+        if code_lenght == 0 {
+            return;
+        }
         let lead = 32 - code_lenght;
 
-        //println!("\n{:b} - {}", branch, branch);
+        println!("\n{:b} - {}", branch, branch);
 
         let mut curr: &mut Node<T> = self;
         let mut i = 32 - lead + 1;
         while i > 0 {            
             match curr {
                 Node::Leaf {ref val} => {
-                    assert_eq!(*val,  nval);
-                    i -= 1;
+                    if *val == nval {
+                        i -= 1;
+                    } else {
+                        // assert_eq!(*val,  nval);
+                        dbg!("tt");
+                        break;
+
+                        i -= 1;
+                    }
                 },
                 Node::None => {
                     let new;
                     if i == 1 {
-                        //println!("> Added Value {:?}", nval);
+                        println!("> Added Value {:?}", nval);
                         new = Box::new(Node::Leaf {val: nval});
                     } else {
-                        //println!("> Added Node");
+                        println!("> Added Node");
                         new = Box::new(Node::Branch { left: Box::new(Node::None), right: Box::new(Node::None) });
                     }
                     *curr = *new;
