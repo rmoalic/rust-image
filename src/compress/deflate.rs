@@ -72,13 +72,9 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                 bit_reader.read_bytes(data.as_mut())?;
                 ret.extend(data); //TODO: improve copy (double copy)
             },
-            DeflateCompression::Fixed | DeflateCompression::Dynamic => {
-                let decode_tree: crate::compress::huffman::Node<u32> = match btype {
-                    DeflateCompression::Fixed => crate::compress::huffman::generate_fixed_deflate_tree(), //TODO: cache Tree
-                    DeflateCompression::Dynamic => generate_dynamic_deflate_tree(&mut bit_reader)?,
-                    DeflateCompression::None => unreachable!()
-                };
-//                unimplemented!();
+            DeflateCompression::Fixed => {
+                let decode_tree = crate::compress::huffman::generate_fixed_deflate_tree(); //TODO: cache Tree
+                let distance_tree = crate::compress::huffman::generate_fixed_deflate_distance_tree(); //TODO: cache
 
                 let mut raw: Vec<LzssCode> = Vec::new();
 
@@ -90,12 +86,34 @@ pub fn decode(data: &[u8]) -> Result<Vec<u8>, std::io::Error> {
                     if code == 256 {
                         break;
                     }
-                    let (lenght, distance): (u16, u16) = get_block_lenght_and_distance(code as u16, &mut bit_reader)?;
+                    let (lenght, distance): (u16, u16) = get_block_lenght_and_distance(code as u16, &distance_tree, &mut bit_reader)?;
                     raw.push(LzssCode::Block{lenght: lenght, distance: distance});
                 }
                 
                 let decoded: Vec<u8> = lzss_decode(&raw);
                 ret.extend(decoded);
+            },
+            DeflateCompression::Dynamic => {
+                let (decode_tree, code_distance_tree) = generate_dynamic_deflate_tree(&mut bit_reader)?;
+
+                let mut raw: Vec<LzssCode> = Vec::new();
+
+                while let Ok((_code_len, code)) = decode_tree.read_one(&mut bit_reader) {
+                    if code <= 255 {
+                        raw.push(LzssCode::Val{code: code as u8});
+                        continue;
+                    }
+                    if code == 256 {
+                        break;
+                    }
+//                    let (_len, distance) = code_distance_tree.read_one(&mut bit_reader).unwrap();
+                    let (lenght, distance): (u16, u16) = get_block_lenght_and_distance(code as u16, &code_distance_tree, &mut bit_reader)?;
+                    raw.push(LzssCode::Block{lenght: lenght as u16, distance: distance as u16});
+                }
+                
+                let decoded: Vec<u8> = lzss_decode(&raw);
+                ret.extend(decoded);
+
             }
         }
 

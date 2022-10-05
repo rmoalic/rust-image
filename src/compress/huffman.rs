@@ -122,7 +122,7 @@ fn generate_dynamic_deflate_tree_read<R: Read>(codelen_tree: &Node<u32>, bit_rea
     Ok(bitlen)
 }
 
-pub fn generate_dynamic_deflate_tree<R: Read>(bit_reader: &mut BitReader<R, LittleEndian>) -> Result<Node<u32>, std::io::Error> {
+pub fn generate_dynamic_deflate_tree<R: Read>(bit_reader: &mut BitReader<R, LittleEndian>) -> Result<(Node<u32>, Node<u32>), std::io::Error> {
     let hlit: u16 = bit_reader.read(5)?;
     let hdis: u16 = bit_reader.read(5)?;
     let hclen: u16 = bit_reader.read(4)?;
@@ -140,15 +140,20 @@ pub fn generate_dynamic_deflate_tree<R: Read>(bit_reader: &mut BitReader<R, Litt
     dbg!("HERE");
     let literallenght_tree = generate_tree(literallenght_tree_bitlen);
     println!("{:}", literallenght_tree);
+
+    /*
+    TODO:
+         The code length repeat codes can cross from HLIT + 257 to the
+         HDIST + 1 code lengths.  In other words, all code lengths form
+         a single sequence of HLIT + HDIST + 258 values.
+    */
     
     let distance_tree_bitlen = generate_dynamic_deflate_tree_read(&codelen_tree, bit_reader, (hdis + 1) as usize)?;
     dbg!("TOP");
     let distance_tree = generate_tree(distance_tree_bitlen);
     println!("{:}", distance_tree);
     
-    //Ok(code_tree)
-    Ok(literallenght_tree)
-    //Ok((literallenght_tree, distance_tree))
+    Ok((literallenght_tree, distance_tree))
 }
 
 #[test]
@@ -227,30 +232,23 @@ impl<T: Copy + PartialEq + std::fmt::Debug> Node<T> {
         }
         let lead = 32 - code_lenght;
 
-        println!("\n{:b} - {}", branch, branch);
+        //println!("\n{:b} - {}", branch, branch);
 
         let mut curr: &mut Node<T> = self;
         let mut i = 32 - lead + 1;
         while i > 0 {            
             match curr {
                 Node::Leaf {ref val} => {
-                    if *val == nval {
-                        i -= 1;
-                    } else {
-                        // assert_eq!(*val,  nval);
-                        dbg!("tt");
-                        break;
-
-                        i -= 1;
-                    }
+                    assert_eq!(*val,  nval);
+                    i -= 1;
                 },
                 Node::None => {
                     let new;
                     if i == 1 {
-                        println!("> Added Value {:?}", nval);
+                        //println!("> Added Value {:?}", nval);
                         new = Box::new(Node::Leaf {val: nval});
                     } else {
-                        println!("> Added Node");
+                        //println!("> Added Node");
                         new = Box::new(Node::Branch { left: Box::new(Node::None), right: Box::new(Node::None) });
                     }
                     *curr = *new;

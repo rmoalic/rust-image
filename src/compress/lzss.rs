@@ -27,7 +27,7 @@ impl Debug for LzssCode {
      }
 }
 
-pub fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut BitReader<R, LittleEndian>) -> Result<(u16, u16), std::io::Error> {
+pub fn get_block_lenght_and_distance<R: Read>(curr: u16, tree: &huffman::Node<u32>, compressed_data: &mut BitReader<R, LittleEndian>) -> Result<(u16, u16), std::io::Error> {
     let lenght: u16;
     let distance: u16;
     assert!(curr >= 257);
@@ -86,9 +86,7 @@ pub fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut B
    8   3  17-24   18   8    513-768   28   13 16385-24576
    9   3  25-32   19   8   769-1024   29   13 24577-32768
      */
-    let tree: huffman::Node<u32> = huffman::generate_fixed_deflate_distance_tree(); //TODO: cache
-    let (len2, currd): (u32, u32) = tree.read_one(compressed_data).unwrap();
-    assert_eq!(len2, 5);
+    let (_len2, currd): (u32, u32) = tree.read_one(compressed_data).unwrap();
     let curr2 = currd as u16;
 
     if curr2 <= 3 {
@@ -98,7 +96,7 @@ pub fn get_block_lenght_and_distance<R: Read>(curr: u16, compressed_data: &mut B
         assert!(extra_bits <= 13);
         let base: u16 = curr2 + 1;
         let add: u16 = compressed_data.read(extra_bits.into())?;
-        //dbg!(base, extra_bits, add);
+        dbg!(base, extra_bits, add);
         distance = base + add;
     }
     
